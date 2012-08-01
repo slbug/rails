@@ -66,6 +66,12 @@ module ActiveRecord
       autoload :Delegation
     end
 
+    # TODO: Shrink this list down.
+    # Most of these are modules included in Base therefore
+    # including them in eager_load list is redundant. Base,
+    # for instance, should **not** be in the eager_load list
+    # since it will be autoloaded by any model that needs it
+    # on boot.
     autoload :Base
     autoload :Callbacks
     autoload :Core
@@ -158,6 +164,15 @@ module ActiveRecord
 
   autoload :TestCase
   autoload :TestFixtures, 'active_record/fixtures'
+
+  def self.eager_load!
+    super
+    ActiveRecord::Locking.eager_load!
+    ActiveRecord::Scoping.eager_load!
+    ActiveRecord::Associations.eager_load!
+    ActiveRecord::AttributeMethods.eager_load!
+    ActiveRecord::ConnectionAdapters.eager_load!
+  end
 end
 
 ActiveSupport.on_load(:active_record) do

@@ -33,7 +33,6 @@ module ActiveModel
   autoload :Conversion
   autoload :Dirty
   autoload :EachValidator, 'active_model/validator'
-  autoload :Errors
   autoload :Lint
   autoload :MassAssignmentSecurity
   autoload :Model
@@ -48,11 +47,22 @@ module ActiveModel
   autoload :Validations
   autoload :Validator
 
+  eager_autoload do
+    autoload :Errors
+  end
+
   module Serializers
     extend ActiveSupport::Autoload
 
-    autoload :JSON
-    autoload :Xml
+    eager_autoload do
+      autoload :JSON
+      autoload :Xml
+    end
+  end
+
+  def eager_load!
+    super
+    ActiveModel::Serializer.eager_load!
   end
 end
 
