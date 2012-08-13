@@ -62,6 +62,12 @@ module ActiveRecord
           "{#{casted_values.join(',')}}"
         end
 
+        def range_to_string(object)
+          from = object.begin.respond_to?(:infinite?) && object.begin.infinite? ? '' : object.begin
+          to   = object.end.respond_to?(:infinite?) && object.end.infinite? ? '' : object.end
+          "[#{from},#{to}#{object.exclude_end? ? ')' : ']'}"
+        end
+
         def string_to_json(string)
           if String === string
             ActiveSupport::JSON.decode(string)

@@ -1,5 +1,24 @@
 ## Rails 4.0.0 (unreleased) ##
 
+*   PostgreSQL ranges type support. Includes: int4range, int8range,
+    numrange, tsrange, tstzrange, daterange
+
+    Ranges can be created with inclusive and exclusive bounds.
+
+    Example:
+
+        create_table :Room do |t|
+          t.daterange :availability
+        end
+
+        Room.create(availability: (Date.today..Float::INFINITY))
+        Room.first.availability # => Wed, 19 Sep 2012..Infinity
+
+    One thing to note: Range class does not support exclusive lower
+    bound.
+
+    *Alexander Grebennik*
+
 *   Ensure that associations take a symbol argument. *Steve Klabnik*
 
 *   Fix dirty attribute checks for `TimeZoneConversion` with nil and blank
