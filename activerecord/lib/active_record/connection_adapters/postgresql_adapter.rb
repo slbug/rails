@@ -90,6 +90,14 @@ module ActiveRecord
           end
         end
 
+        def range_to_string(object)
+          if object.is_a?(::Date) || object.is_a?(::Time)
+            "['#{object.begin.to_s}','#{object.end.to_s}'#{object.exclude_end? ? ')' : ']'}"
+          else
+            "[#{object.begin.to_s},#{object.end.to_s}#{object.exclude_end? ? ')' : ']'}"
+          end
+        end
+
         def cidr_to_string(object)
           if IPAddr === object
             "#{object.to_s}/#{object.instance_variable_get(:@mask_addr).to_s(2).count('1')}"
@@ -261,6 +269,8 @@ module ActiveRecord
         # Small and big integer types
         when /^(?:small|big)int$/
           :integer
+        when /(num|date|tstz|ts|int4|int8)range$/
+          field_type.to_sym
         # Pass through all types that are not specific to PostgreSQL.
         else
           super
@@ -305,6 +315,30 @@ module ActiveRecord
           column(args[0], 'tsvector', options)
         end
 
+        def int4range(name, options = {})
+          column(name, 'int4range', options)
+        end
+
+        def int8range(name, options = {})
+          column(name, 'int8range', options)
+        end
+
+        def tsrange(name, options = {})
+          column(name, 'tsrange', options)
+        end
+
+        def tstzrange(name, options = {})
+          column(name, 'tstzrange', options)
+        end
+
+        def numrange(name, options = {})
+          column(name, 'numrange', options)
+        end
+
+        def daterange(name, options = {})
+          column(name, 'daterange', options)
+        end
+
         def hstore(name, options = {})
           column(name, 'hstore', options)
         end
@@ -339,6 +373,12 @@ module ActiveRecord
         :timestamp   => { :name => "timestamp" },
         :time        => { :name => "time" },
         :date        => { :name => "date" },
+        :daterange   => { :name => "daterange" },
+        :numrange    => { :name => "numrange" },
+        :tsrange     => { :name => "tsrange" },
+        :tstzrange   => { :name => "tstzrange" },
+        :int4range   => { :name => "int4range" },
+        :int8range   => { :name => "int8range" },
         :binary      => { :name => "bytea" },
         :boolean     => { :name => "boolean" },
         :xml         => { :name => "xml" },
@@ -553,6 +593,8 @@ module ActiveRecord
         return super unless column
 
         case value
+        when Range
+          super(PostgreSQLColumn.range_to_string(value), column)
         when Hash
           case column.sql_type
           when 'hstore' then super(PostgreSQLColumn.hstore_to_string(value), column)
@@ -596,6 +638,9 @@ module ActiveRecord
         return super unless column
 
         case value
+        when Range
+          return super unless /range$/ =~ column.sql_type
+          PostgreSQLColumn.range_to_string(value)
         when String
           return super unless 'bytea' == column.sql_type
           { :value => value, :format => 1 }
