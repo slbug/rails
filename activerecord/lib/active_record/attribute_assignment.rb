@@ -84,11 +84,11 @@ module ActiveRecord
     def assign_attributes(new_attributes, options = {})
       return if new_attributes.blank?
 
-      attributes = new_attributes.stringify_keys
-      multi_parameter_attributes = []
+      attributes                  = new_attributes.stringify_keys
+      multi_parameter_attributes  = []
       nested_parameter_attributes = []
-      previous_options = @mass_assignment_options
-      @mass_assignment_options = options
+      previous_options            = @mass_assignment_options
+      @mass_assignment_options    = options
 
       unless options[:without_protection]
         attributes = sanitize_for_mass_assignment(attributes, mass_assignment_role)
@@ -97,23 +97,16 @@ module ActiveRecord
       attributes.each do |k, v|
         if k.include?("(")
           multi_parameter_attributes << [ k, v ]
-        elsif respond_to?("#{k}=")
-          if v.is_a?(Hash)
-            nested_parameter_attributes << [ k, v ]
-          else
-            send("#{k}=", v)
-          end
+        elsif v.is_a?(Hash)
+          nested_parameter_attributes << [ k, v ]
         else
-          raise(UnknownAttributeError, "unknown attribute: #{k}")
+          _assign_attribute(k, v)
         end
       end
 
       # assign any deferred nested attributes after the base attributes have been set
-      nested_parameter_attributes.each do |k,v|
-        send("#{k}=", v)
-      end
-
-      assign_multiparameter_attributes(multi_parameter_attributes)
+      nested_parameter_attributes.each { |k,v| _assign_attribute(k, v) }
+      assign_multiparameter_attributes(multi_parameter_attributes) unless multi_parameter_attributes.empty?
     ensure
       @mass_assignment_options = previous_options
     end
@@ -129,6 +122,16 @@ module ActiveRecord
     end
 
     private
+
+    def _assign_attribute(k, v)
+      public_send("#{k}=", v)
+    rescue NoMethodError
+      if respond_to?("#{k}=")
+        raise
+      else
+        raise UnknownAttributeError, "unknown attribute: #{k}"
+      end
+    end
 
     # Instantiates objects for all attribute classes that needs more than one constructor parameter. This is done
     # by calling new on the column type or aggregation type (through composed_of) object with these parameters.

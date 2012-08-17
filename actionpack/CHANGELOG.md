@@ -1,5 +1,51 @@
 ## Rails 4.0.0 (unreleased) ##
 
+*   Add Request#formats=(extensions) that lets you set multiple formats directly in a prioritized order *DHH*
+
+    Example of using this for custom iphone views with an HTML fallback:
+
+        class ApplicationController < ActionController::Base
+          before_filter :adjust_format_for_iphone_with_html_fallback
+
+          private
+            def adjust_format_for_iphone_with_html_fallback
+              request.formats = [ :iphone, :html ] if request.env["HTTP_USER_AGENT"][/iPhone/]
+            end
+        end
+
+
+*   Add Routing Concerns to declare common routes that can be reused inside
+    others resources and routes.
+
+    Code before:
+
+        resources :messages do
+          resources :comments
+        end
+
+        resources :posts do
+          resources :comments
+          resources :images, only: :index
+        end
+
+    Code after:
+
+        concern :commentable do
+          resources :comments
+        end
+
+        concern :image_attachable do
+          resources :images, only: :index
+        end
+
+        resources :messages, concerns: :commentable
+
+        resources :posts, concerns: [:commentable, :image_attachable]
+
+    *DHH + Rafael Mendonça França*
+
+*   Add start_hour and end_hour options to the select_hour helper. *Evan Tann*
+
 *   Raises an ArgumentError when the first argument in `form_for` contain `nil`
     or is empty.
 
@@ -954,11 +1000,11 @@
 
     Before:
 
-      translate('foo_html', :something => '<script>') # => "...<script>..."
+        translate('foo_html', :something => '<script>') # => "...<script>..."
 
     After:
 
-      translate('foo_html', :something => '<script>') # => "...&lt;script&gt;..."
+        translate('foo_html', :something => '<script>') # => "...&lt;script&gt;..."
 
     *Sergey Nartimov*
 

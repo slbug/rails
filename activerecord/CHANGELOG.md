@@ -1,5 +1,20 @@
 ## Rails 4.0.0 (unreleased) ##
 
+*   Fix Column.microseconds and Column.fast_string_to_date to avoid converting
+    timestamp seconds to a float, since it occasionally results in inaccuracies
+    with microsecond-precision times. Fixes #7352.
+
+    *Ari Pollak*
+
+*   Raise `ArgumentError` if list of attributes to change is empty in `update_all`.
+
+    *Roman Shatsov*
+
+*   Fix AR#create to return an unsaved record when AR::RecordInvalid is
+    raised. Fixes #3217.
+
+    *Dave Yeu*
+
 *   Fixed table name prefix that is generated in engines for namespaced models
     *Wojciech Wnętrzak*
 
@@ -285,7 +300,7 @@
         `where(...).first_or_create!`
 
     The implementation of the deprecated dynamic finders has been moved
-    to the `active_record_deprecated_finders` gem. See below for details.
+    to the `activerecord-deprecated_finders` gem. See below for details.
 
     *Jon Leighton*
 
@@ -316,7 +331,7 @@
       * `:extend` becomes `:extending`
 
     The code to implement the deprecated features has been moved out to
-    the `active_record_deprecated_finders` gem. This gem is a dependency
+    the `activerecord-deprecated_finders` gem. This gem is a dependency
     of Active Record in Rails 4.0. It will no longer be a dependency
     from Rails 4.1, but if your app relies on the deprecated features
     then you can add it to your own Gemfile. It will be maintained by
@@ -581,14 +596,7 @@
 
 *   PostgreSQL hstore types are automatically deserialized from the database.
 
-
 ## Rails 3.2.8 (Aug 9, 2012) ##
-
-*   Do not consider the numeric attribute as changed if the old value is zero and the new value
-    is not a string.
-    Fixes #7237.
-
-    *Rafael Mendonça França*
 
 *   Do not consider the numeric attribute as changed if the old value is zero and the new value
     is not a string.
