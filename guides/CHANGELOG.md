@@ -1,9 +1,13 @@
-## Rails 4.0.0 (unreleased) ##
+*   Fixed missing line and shadow on service pages(404, 422, 500).
 
-*   Split Validations and Callbacks guide into two. *Steve Klabnik*
+    *Dmitry Korotkov*
 
-*   New guide _Working with JavaScript in Rails_. *Steve Klabnik*
+*   Removed repetitive th tags. Instead of them added one th tag with a colspan attribute.
 
-*   Guides updated to reflect new test locations. *Mike Moore*
+    *Sıtkı Bağdat*
 
-*   Guides have a responsive design. *Joe Fiorini*
+*   Added the Rails maintenance policy to the guides.
+
+    *Matias Korhonen*
+
+Please check [4-0-stable](https://github.com/rails/rails/blob/4-0-stable/guides/CHANGELOG.md) for previous changes.

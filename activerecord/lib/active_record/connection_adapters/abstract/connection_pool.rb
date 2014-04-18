@@ -86,7 +86,7 @@ module ActiveRecord
           end
         end
 
-        # Return the number of threads currently waiting on this
+        # Returns the number of threads currently waiting on this
         # queue.
         def num_waiting
           synchronize do
@@ -237,7 +237,7 @@ module ActiveRecord
         @spec = spec
 
         @checkout_timeout = spec.config[:checkout_timeout] || 5
-        @dead_connection_timeout = spec.config[:dead_connection_timeout]
+        @dead_connection_timeout = spec.config[:dead_connection_timeout] || 5
         @reaper  = Reaper.new self, spec.config[:reaping_frequency]
         @reaper.run
 
@@ -251,14 +251,6 @@ module ActiveRecord
         @automatic_reconnect = true
 
         @available = Queue.new self
-      end
-
-      # Hack for tests to be able to add connections.  Do not call outside of tests
-      def insert_connection_for_test!(c) #:nodoc:
-        synchronize do
-          @connections << c
-          @available.add c
-        end
       end
 
       # Retrieve the connection associated with the current thread, or call
@@ -340,11 +332,6 @@ module ActiveRecord
         end
       end
 
-      def clear_stale_cached_connections! # :nodoc:
-        reap
-      end
-      deprecate :clear_stale_cached_connections! => "Please use #reap instead"
-
       # Check-out a database connection from the pool, indicating that you want
       # to use it. You should call #checkin when you no longer need this.
       #
@@ -406,7 +393,9 @@ module ActiveRecord
         synchronize do
           stale = Time.now - @dead_connection_timeout
           connections.dup.each do |conn|
-            remove conn if conn.in_use? && stale > conn.last_use && !conn.active?
+            if conn.in_use? && stale > conn.last_use && !conn.active_threadsafe?
+              remove conn
+            end
           end
         end
       end
@@ -577,10 +566,10 @@ module ActiveRecord
       # When a connection is established or removed, we invalidate the cache.
       #
       # Ideally we would use #fetch here, as class_to_pool[klass] may sometimes be nil.
-      # However, benchmarking (https://gist.github.com/3552829) showed that #fetch is
-      # significantly slower than #[]. So in the nil case, no caching will take place,
-      # but that's ok since the nil case is not the common one that we wish to optimise
-      # for.
+      # However, benchmarking (https://gist.github.com/jonleighton/3552829) showed that
+      # #fetch is significantly slower than #[]. So in the nil case, no caching will
+      # take place, but that's ok since the nil case is not the common one that we wish
+      # to optimise for.
       def retrieve_connection_pool(klass)
         class_to_pool[klass.name] ||= begin
           until pool = pool_for(klass)
@@ -635,7 +624,7 @@ module ActiveRecord
         end
 
         response
-      rescue
+      rescue Exception
         ActiveRecord::Base.clear_active_connections! unless testing
         raise
       end

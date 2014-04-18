@@ -11,9 +11,17 @@ module ActiveRecord
     #   Person.count(:all)
     #   # => performs a COUNT(*) (:all is an alias for '*')
     #
-    #   Person.count(:age, distinct: true)
+    #   Person.distinct.count(:age)
     #   # => counts the number of different age values
+    #
+    # If +count+ is used with +group+, it returns a Hash whose keys represent the aggregated column,
+    # and the values are the respective amounts:
+    #
+    #   Person.group(:city).count
+    #   # => { 'Rome' => 5, 'Paris' => 3 }
     def count(column_name = nil, options = {})
+      # TODO: Remove options argument as soon we remove support to
+      # activerecord-deprecated_finders.
       column_name, options = nil, column_name if column_name.is_a?(Hash)
       calculate(:count, column_name, options)
     end
@@ -21,8 +29,10 @@ module ActiveRecord
     # Calculates the average value on a given column. Returns +nil+ if there's
     # no row. See +calculate+ for examples with options.
     #
-    #   Person.average('age') # => 35.8
+    #   Person.average(:age) # => 35.8
     def average(column_name, options = {})
+      # TODO: Remove options argument as soon we remove support to
+      # activerecord-deprecated_finders.
       calculate(:average, column_name, options)
     end
 
@@ -30,8 +40,10 @@ module ActiveRecord
     # with the same data type of the column, or +nil+ if there's no row. See
     # +calculate+ for examples with options.
     #
-    #   Person.minimum('age') # => 7
+    #   Person.minimum(:age) # => 7
     def minimum(column_name, options = {})
+      # TODO: Remove options argument as soon we remove support to
+      # activerecord-deprecated_finders.
       calculate(:minimum, column_name, options)
     end
 
@@ -39,8 +51,10 @@ module ActiveRecord
     # with the same data type of the column, or +nil+ if there's no row. See
     # +calculate+ for examples with options.
     #
-    #   Person.maximum('age') # => 93
+    #   Person.maximum(:age) # => 93
     def maximum(column_name, options = {})
+      # TODO: Remove options argument as soon we remove support to
+      # activerecord-deprecated_finders.
       calculate(:maximum, column_name, options)
     end
 
@@ -48,17 +62,9 @@ module ActiveRecord
     # with the same data type of the column, 0 if there's no row. See
     # +calculate+ for examples with options.
     #
-    #   Person.sum('age') # => 4562
+    #   Person.sum(:age) # => 4562
     def sum(*args)
-      if block_given?
-        ActiveSupport::Deprecation.warn(
-          "Calling #sum with a block is deprecated and will be removed in Rails 4.1. " \
-          "If you want to perform sum calculation over the array of elements, use `to_a.sum(&block)`."
-        )
-        self.to_a.sum(*args) {|*block_args| yield(*block_args)}
-      else
-        calculate(:sum, *args)
-      end
+      calculate(:sum, *args)
     end
 
     # This calculates aggregate values in the given column. Methods for count, sum, average,
@@ -76,7 +82,7 @@ module ActiveRecord
     #       puts values["Drake"]
     #       # => 43
     #
-    #       drake  = Family.find_by_last_name('Drake')
+    #       drake  = Family.find_by(last_name: 'Drake')
     #       values = Person.group(:family).maximum(:age) # Person belongs_to :family
     #       puts values[drake]
     #       # => 43
@@ -93,19 +99,17 @@ module ActiveRecord
     #
     #   Person.sum("2 * age")
     def calculate(operation, column_name, options = {})
-      relation = with_default_scope
-
-      if relation.equal?(self)
-        if has_include?(column_name)
-          construct_relation_for_association_calculations.calculate(operation, column_name, options)
-        else
-          perform_calculation(operation, column_name, options)
-        end
-      else
-        relation.calculate(operation, column_name, options)
+      # TODO: Remove options argument as soon we remove support to
+      # activerecord-deprecated_finders.
+      if column_name.is_a?(Symbol) && attribute_alias?(column_name)
+        column_name = attribute_alias(column_name)
       end
-    rescue ThrowResult
-      0
+
+      if has_include?(column_name)
+        construct_relation_for_association_calculations.calculate(operation, column_name, options)
+      else
+        perform_calculation(operation, column_name, options)
+      end
     end
 
     # Use <tt>pluck</tt> as a shortcut to select one or more attributes without
@@ -129,7 +133,7 @@ module ActiveRecord
     #   # SELECT people.id, people.name FROM people
     #   # => [[1, 'David'], [2, 'Jeremy'], [3, 'Jose']]
     #
-    #   Person.uniq.pluck(:role)
+    #   Person.pluck('DISTINCT role')
     #   # SELECT DISTINCT role FROM people
     #   # => ['admin', 'member', 'guest']
     #
@@ -143,10 +147,10 @@ module ActiveRecord
     #
     def pluck(*column_names)
       column_names.map! do |column_name|
-        if column_name.is_a?(Symbol) && self.column_names.include?(column_name.to_s)
-          "#{connection.quote_table_name(table_name)}.#{connection.quote_column_name(column_name)}"
+        if column_name.is_a?(Symbol) && attribute_alias?(column_name)
+          attribute_alias(column_name)
         else
-          column_name
+          column_name.to_s
         end
       end
 
@@ -154,22 +158,20 @@ module ActiveRecord
         construct_relation_for_association_calculations.pluck(*column_names)
       else
         relation = spawn
-        relation.select_values = column_names
+        relation.select_values = column_names.map { |cn|
+          columns_hash.key?(cn) ? arel_table[cn] : cn
+        }
         result = klass.connection.select_all(relation.arel, nil, bind_values)
         columns = result.columns.map do |key|
           klass.column_types.fetch(key) {
-            result.column_types.fetch(key) {
-              Class.new { def type_cast(v); v; end }.new
-            }
+            result.column_types.fetch(key) { result.identity_type }
           }
         end
 
         result = result.map do |attributes|
           values = klass.initialize_attributes(attributes).values
 
-          columns.zip(values).map do |column, value|
-            column.type_cast(value)
-          end
+          columns.zip(values).map { |column, value| column.type_cast value }
         end
         columns.one? ? result.map!(&:first) : result
       end
@@ -190,20 +192,22 @@ module ActiveRecord
     end
 
     def perform_calculation(operation, column_name, options = {})
+      # TODO: Remove options argument as soon we remove support to
+      # activerecord-deprecated_finders.
       operation = operation.to_s.downcase
 
-      distinct = options[:distinct]
+      # If #count is used with #distinct / #uniq it is considered distinct. (eg. relation.distinct.count)
+      distinct = self.distinct_value
 
       if operation == "count"
-        column_name ||= (select_for_count || :all)
+        column_name ||= select_for_count
 
         unless arel.ast.grep(Arel::Nodes::OuterJoin).empty?
           distinct = true
         end
 
         column_name = primary_key if column_name == :all && distinct
-
-        distinct = nil if column_name =~ /\s*DISTINCT\s+/i
+        distinct = nil if column_name =~ /\s*DISTINCT[\s(]+/i
       end
 
       if group_values.any?
@@ -227,7 +231,7 @@ module ActiveRecord
 
     def execute_simple_calculation(operation, column_name, distinct) #:nodoc:
       # Postgresql doesn't like ORDER BY when there are no GROUP BY
-      relation = reorder(nil)
+      relation = unscope(:order)
 
       column_alias = column_name
 
@@ -320,7 +324,9 @@ module ActiveRecord
         }
         key = key.first if key.size == 1
         key = key_records[key] if associated
-        [key, type_cast_calculated_value(row[aggregate_alias], column_for(column_name), operation)]
+
+        column_type = calculated_data.column_types.fetch(aggregate_alias) { column_for(column_name) }
+        [key, type_cast_calculated_value(row[aggregate_alias], column_type, operation)]
       end]
     end
 
@@ -364,10 +370,12 @@ module ActiveRecord
       column ? column.type_cast(value) : value
     end
 
+    # TODO: refactor to allow non-string `select_values` (eg. Arel nodes).
     def select_for_count
       if select_values.present?
-        select = select_values.join(", ")
-        select if select !~ /[,*]/
+        select_values.join(", ")
+      else
+        :all
       end
     end
 

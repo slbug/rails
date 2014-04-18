@@ -10,9 +10,9 @@ module ActiveRecord
   #
   #   config.active_record.record_timestamps = false
   #
-  # Timestamps are in the local timezone by default but you can use UTC by setting:
+  # Timestamps are in UTC by default but you can use the local timezone by setting:
   #
-  #   config.active_record.default_timezone = :utc
+  #   config.active_record.default_timezone = :local
   #
   # == Time Zone aware attributes
   #
@@ -37,8 +37,8 @@ module ActiveRecord
     end
 
     def initialize_dup(other) # :nodoc:
-      clear_timestamp_attributes
       super
+      clear_timestamp_attributes
     end
 
   private
@@ -71,7 +71,7 @@ module ActiveRecord
     end
 
     def should_record_timestamps?
-      self.record_timestamps && (!partial_writes? || changed? || (attributes.keys & self.class.serialized_attributes.keys).present?)
+      self.record_timestamps && (!partial_writes? || changed?)
     end
 
     def timestamp_attributes_for_create_in_model
@@ -96,6 +96,12 @@ module ActiveRecord
 
     def all_timestamp_attributes
       timestamp_attributes_for_create + timestamp_attributes_for_update
+    end
+
+    def max_updated_column_timestamp(timestamp_names = timestamp_attributes_for_update)
+      if (timestamps = timestamp_names.map { |attr| self[attr] }.compact).present?
+        timestamps.map { |ts| ts.to_time }.max
+      end
     end
 
     def current_time_from_proper_timezone

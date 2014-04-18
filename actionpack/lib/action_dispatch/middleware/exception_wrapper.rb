@@ -1,5 +1,5 @@
 require 'action_controller/metal/exceptions'
-require 'active_support/core_ext/class/attribute_accessors'
+require 'active_support/core_ext/module/attribute_accessors'
 
 module ActionDispatch
   class ExceptionWrapper
@@ -9,9 +9,11 @@ module ActionDispatch
       'ActionController::RoutingError'             => :not_found,
       'AbstractController::ActionNotFound'         => :not_found,
       'ActionController::MethodNotAllowed'         => :method_not_allowed,
+      'ActionController::UnknownHttpMethod'        => :method_not_allowed,
       'ActionController::NotImplemented'           => :not_implemented,
       'ActionController::UnknownFormat'            => :not_acceptable,
       'ActionController::InvalidAuthenticityToken' => :unprocessable_entity,
+      'ActionDispatch::ParamsParser::ParseError'   => :bad_request,
       'ActionController::BadRequest'               => :bad_request,
       'ActionController::ParameterMissing'         => :bad_request
     )
@@ -94,7 +96,7 @@ module ActionDispatch
     def source_fragment(path, line)
       return unless Rails.respond_to?(:root) && Rails.root
       full_path = Rails.root.join(path)
-      if File.exists?(full_path)
+      if File.exist?(full_path)
         File.open(full_path, "r") do |file|
           start = [line - 3, 0].max
           lines = file.each_line.drop(start).take(6)

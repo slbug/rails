@@ -1,6 +1,6 @@
 ActiveRecord::Schema.define do
 
-  %w(postgresql_ranges postgresql_tsvectors postgresql_hstores postgresql_arrays postgresql_moneys postgresql_numbers postgresql_times postgresql_network_addresses postgresql_bit_strings postgresql_uuids postgresql_ltrees
+  %w(postgresql_tsvectors postgresql_hstores postgresql_arrays postgresql_moneys postgresql_numbers postgresql_times postgresql_network_addresses postgresql_bit_strings postgresql_uuids postgresql_ltrees
       postgresql_oids postgresql_xml_data_type defaults geometrics postgresql_timestamp_with_zones postgresql_partitioned_table postgresql_partitioned_table_parent postgresql_json_data_type).each do |table_name|
     execute "DROP TABLE IF EXISTS #{quote_table_name table_name}"
   end
@@ -32,6 +32,7 @@ ActiveRecord::Schema.define do
     char3 text default 'a text field',
     positive_integer integer default 1,
     negative_integer integer default -1,
+    bigint_default bigint default 0::bigint,
     decimal_number decimal(3,2) default 2.78,
     multiline_default text DEFAULT '--- []
 
@@ -70,18 +71,6 @@ _SQL
     id SERIAL PRIMARY KEY,
     guid uuid,
     compact_guid uuid
-  );
-_SQL
-
-  execute <<_SQL
-  CREATE TABLE postgresql_ranges (
-    id SERIAL PRIMARY KEY,
-    date_range daterange,
-    num_range numrange,
-    ts_range tsrange,
-    tstz_range tstzrange,
-    int4_range int4range,
-    int8_range int8range
   );
 _SQL
 
@@ -145,9 +134,9 @@ _SQL
   execute <<_SQL
   CREATE TABLE postgresql_network_addresses (
     id SERIAL PRIMARY KEY,
-    cidr_address CIDR,
-    inet_address INET,
-    mac_address MACADDR
+    cidr_address CIDR default '192.168.1.0/24',
+    inet_address INET default '192.168.1.1',
+    mac_address MACADDR default 'ff:ff:ff:ff:ff:ff'
   );
 _SQL
 
@@ -220,4 +209,3 @@ _SQL
     t.text :text, limit: 100_000
   end
 end
-

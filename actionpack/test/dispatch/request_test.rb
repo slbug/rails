@@ -13,6 +13,9 @@ class RequestTest < ActiveSupport::TestCase
 
     assert_equal '/books', url_for(:only_path => true, :path => '/books')
 
+    assert_equal 'http://www.example.com/books/?q=code', url_for(trailing_slash: true, path: '/books?q=code')
+    assert_equal 'http://www.example.com/books/?spareslashes=////', url_for(trailing_slash: true, path: '/books?spareslashes=////')
+
     assert_equal 'http://www.example.com',  url_for
     assert_equal 'http://api.example.com',  url_for(:subdomain => 'api')
     assert_equal 'http://example.com',      url_for(:subdomain => false)
@@ -87,6 +90,14 @@ class RequestTest < ActiveSupport::TestCase
     request = stub_request 'HTTP_X_FORWARDED_FOR' => '1.1.1.1',
                            'HTTP_CLIENT_IP'       => '2.2.2.2',
                            :ip_spoofing_check => false
+    assert_equal '1.1.1.1', request.remote_ip
+  end
+
+  test "remote ip spoof protection ignores private addresses" do
+    request = stub_request 'HTTP_X_FORWARDED_FOR' => '172.17.19.51',
+                           'HTTP_CLIENT_IP'       => '172.17.19.51',
+                           'REMOTE_ADDR'          => '1.1.1.1',
+                           'HTTP_X_BLUECOAT_VIA'  => 'de462e07a2db325e'
     assert_equal '1.1.1.1', request.remote_ip
   end
 
@@ -591,6 +602,11 @@ class RequestTest < ActiveSupport::TestCase
     request.expects(:parameters).at_least_once.returns({})
     assert_equal [Mime::HTML], request.formats
 
+    request = stub_request 'HTTP_ACCEPT' => '',
+                           'HTTP_X_REQUESTED_WITH' => "XMLHttpRequest"
+    request.expects(:parameters).at_least_once.returns({})
+    assert_equal [Mime::JS], request.formats
+
     request = stub_request 'CONTENT_TYPE' => 'application/xml; charset=UTF-8',
                            'HTTP_X_REQUESTED_WITH' => "XMLHttpRequest"
     request.expects(:parameters).at_least_once.returns({})
@@ -608,10 +624,10 @@ class RequestTest < ActiveSupport::TestCase
   test "format is not nil with unknown format" do
     request = stub_request
     request.expects(:parameters).at_least_once.returns({ format: :hello })
-    assert_equal request.format.nil?, true
-    assert_equal request.format.html?, false
-    assert_equal request.format.xml?, false
-    assert_equal request.format.json?, false
+    assert request.format.nil?
+    assert_not request.format.html?
+    assert_not request.format.xml?
+    assert_not request.format.json?
   end
 
   test "formats with xhr request" do
@@ -825,6 +841,31 @@ class RequestTest < ActiveSupport::TestCase
     assert_equal expected, request.if_none_match_etags
     expected.each do |etag|
       assert request.etag_matches?(etag), etag
+    end
+  end
+
+  test "setting variant" do
+    request = stub_request
+
+    request.variant = :mobile
+    assert_equal [:mobile], request.variant
+
+    request.variant = [:phone, :tablet]
+    assert_equal [:phone, :tablet], request.variant
+
+    assert_raise ArgumentError do
+      request.variant = [:phone, "tablet"]
+    end
+
+    assert_raise ArgumentError do
+      request.variant = "yolo"
+    end
+  end
+
+  test "setting variant with non symbol value" do
+    request = stub_request
+    assert_raise ArgumentError do
+      request.variant = "mobile"
     end
   end
 

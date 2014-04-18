@@ -18,27 +18,34 @@ module ActiveRecord
         def quote(value, column = nil) #:nodoc:
           return super unless column
 
+          sql_type = type_to_sql(column.type, column.limit, column.precision, column.scale)
+
           case value
           when Range
-            if /range$/ =~ column.sql_type
-              "'#{PostgreSQLColumn.range_to_string(value)}'::#{column.sql_type}"
+            if /range$/ =~ sql_type
+              "'#{PostgreSQLColumn.range_to_string(value)}'::#{sql_type}"
             else
               super
             end
           when Array
-            if column.array
-              "'#{PostgreSQLColumn.array_to_string(value, column, self)}'"
+            case sql_type
+            when 'point' then super(PostgreSQLColumn.point_to_string(value))
+            when 'json' then super(PostgreSQLColumn.json_to_string(value))
             else
-              super
+              if column.array
+                "'#{PostgreSQLColumn.array_to_string(value, column, self).gsub(/'/, "''")}'"
+              else
+                super
+              end
             end
           when Hash
-            case column.sql_type
+            case sql_type
             when 'hstore' then super(PostgreSQLColumn.hstore_to_string(value), column)
             when 'json' then super(PostgreSQLColumn.json_to_string(value), column)
             else super
             end
           when IPAddr
-            case column.sql_type
+            case sql_type
             when 'inet', 'cidr' then super(PostgreSQLColumn.cidr_to_string(value), column)
             else super
             end
@@ -51,11 +58,14 @@ module ActiveRecord
               super
             end
           when Numeric
-            return super unless column.sql_type == 'money'
-            # Not truly string input, so doesn't require (or allow) escape string syntax.
-            "'#{value}'"
+            if sql_type == 'money' || [:string, :text].include?(column.type)
+              # Not truly string input, so doesn't require (or allow) escape string syntax.
+              "'#{value}'"
+            else
+              super
+            end
           when String
-            case column.sql_type
+            case sql_type
             when 'bytea' then "'#{escape_bytea(value)}'"
             when 'xml'   then "xml '#{quote_string(value)}'"
             when /^bit/
@@ -76,8 +86,11 @@ module ActiveRecord
 
           case value
           when Range
-            return super(value, column) unless /range$/ =~ column.sql_type
-            PostgreSQLColumn.range_to_string(value)
+            if /range$/ =~ column.sql_type
+              PostgreSQLColumn.range_to_string(value)
+            else
+              super(value, column)
+            end
           when NilClass
             if column.array && array_member
               'NULL'
@@ -87,20 +100,37 @@ module ActiveRecord
               super(value, column)
             end
           when Array
-            return super(value, column) unless column.array
-            PostgreSQLColumn.array_to_string(value, column, self)
+            case column.sql_type
+            when 'point' then PostgreSQLColumn.point_to_string(value)
+            when 'json' then PostgreSQLColumn.json_to_string(value)
+            else
+              if column.array
+                PostgreSQLColumn.array_to_string(value, column, self)
+              else
+                super(value, column)
+              end
+            end
           when String
-            return super(value, column) unless 'bytea' == column.sql_type
-            { :value => value, :format => 1 }
+            if 'bytea' == column.sql_type
+              # Return a bind param hash with format as binary.
+              # See http://deveiate.org/code/pg/PGconn.html#method-i-exec_prepared-doc
+              # for more information
+              { value: value, format: 1 }
+            else
+              super(value, column)
+            end
           when Hash
             case column.sql_type
-            when 'hstore' then PostgreSQLColumn.hstore_to_string(value)
+            when 'hstore' then PostgreSQLColumn.hstore_to_string(value, array_member)
             when 'json' then PostgreSQLColumn.json_to_string(value)
             else super(value, column)
             end
           when IPAddr
-            return super(value, column) unless ['inet','cidr'].include? column.sql_type
-            PostgreSQLColumn.cidr_to_string(value)
+            if %w(inet cidr).include? column.sql_type
+              PostgreSQLColumn.cidr_to_string(value)
+            else
+              super(value, column)
+            end
           else
             super(value, column)
           end
@@ -128,6 +158,10 @@ module ActiveRecord
             table_name, name_part = extract_pg_identifier_from_name(name_part)
             "#{quote_column_name(schema)}.#{quote_column_name(table_name)}"
           end
+        end
+
+        def quote_table_name_for_assignment(table, attr)
+          quote_column_name(attr)
         end
 
         # Quotes column names for use in SQL queries.

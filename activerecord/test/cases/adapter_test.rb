@@ -1,9 +1,25 @@
 require "cases/helper"
+require "models/book"
+require "models/post"
+require "models/author"
 
 module ActiveRecord
   class AdapterTest < ActiveRecord::TestCase
     def setup
       @connection = ActiveRecord::Base.connection
+    end
+
+    ##
+    # PostgreSQL does not support null bytes in strings
+    unless current_adapter?(:PostgreSQLAdapter)
+      def test_update_prepared_statement
+        b = Book.create(name: "my \x00 book")
+        b.reload
+        assert_equal "my \x00 book", b.name
+        b.update_attributes(name: "my other \x00 book")
+        b.reload
+        assert_equal "my other \x00 book", b.name
+      end
     end
 
     def test_tables
@@ -78,7 +94,7 @@ module ActiveRecord
             )
           end
         ensure
-          ActiveRecord::Base.establish_connection 'arunit'
+          ActiveRecord::Base.establish_connection :arunit
         end
       end
     end
@@ -100,7 +116,7 @@ module ActiveRecord
       end
     end
 
-    # test resetting sequences in odd tables in postgreSQL
+    # test resetting sequences in odd tables in PostgreSQL
     if ActiveRecord::Base.connection.respond_to?(:reset_pk_sequence!)
       require 'models/movie'
       require 'models/subscriber'
@@ -153,11 +169,41 @@ module ActiveRecord
           else
             @connection.execute "INSERT INTO fk_test_has_fk (fk_id) VALUES (0)"
           end
-          # should deleted created record as otherwise disable_referential_integrity will try to enable contraints after executed block
+          # should delete created record as otherwise disable_referential_integrity will try to enable constraints after executed block
           # and will fail (at least on Oracle)
           @connection.execute "DELETE FROM fk_test_has_fk"
         end
       end
+    end
+
+    def test_select_all_always_return_activerecord_result
+      result = @connection.select_all "SELECT * FROM posts"
+      assert result.is_a?(ActiveRecord::Result)
+    end
+
+    def test_select_methods_passing_a_association_relation
+      author = Author.create!(name: 'john')
+      Post.create!(author: author, title: 'foo', body: 'bar')
+      query = author.posts.select(:title)
+      assert_equal({"title" => "foo"}, @connection.select_one(query.arel, nil, query.bind_values))
+      assert_equal({"title" => "foo"}, @connection.select_one(query))
+      assert @connection.select_all(query).is_a?(ActiveRecord::Result)
+      assert_equal "foo", @connection.select_value(query)
+      assert_equal ["foo"], @connection.select_values(query)
+    end
+
+    def test_select_methods_passing_a_relation
+      Post.create!(title: 'foo', body: 'bar')
+      query = Post.where(title: 'foo').select(:title)
+      assert_equal({"title" => "foo"}, @connection.select_one(query.arel, nil, query.bind_values))
+      assert_equal({"title" => "foo"}, @connection.select_one(query))
+      assert @connection.select_all(query).is_a?(ActiveRecord::Result)
+      assert_equal "foo", @connection.select_value(query)
+      assert_equal ["foo"], @connection.select_values(query)
+    end
+
+    test "type_to_sql returns a String for unmapped types" do
+      assert_equal "special_db_type", @connection.type_to_sql(:special_db_type)
     end
   end
 
@@ -168,7 +214,7 @@ module ActiveRecord
     end
 
     def setup
-      Klass.establish_connection 'arunit'
+      Klass.establish_connection :arunit
       @connection = Klass.connection
     end
 
@@ -176,22 +222,20 @@ module ActiveRecord
       Klass.remove_connection
     end
 
-    test "transaction state is reset after a reconnect" do
-      skip "in-memory db doesn't allow reconnect" if in_memory_db?
+    unless in_memory_db?
+      test "transaction state is reset after a reconnect" do
+        @connection.begin_transaction
+        assert @connection.transaction_open?
+        @connection.reconnect!
+        assert !@connection.transaction_open?
+      end
 
-      @connection.begin_transaction
-      assert @connection.transaction_open?
-      @connection.reconnect!
-      assert !@connection.transaction_open?
-    end
-
-    test "transaction state is reset after a disconnect" do
-      skip "in-memory db doesn't allow disconnect" if in_memory_db?
-
-      @connection.begin_transaction
-      assert @connection.transaction_open?
-      @connection.disconnect!
-      assert !@connection.transaction_open?
+      test "transaction state is reset after a disconnect" do
+        @connection.begin_transaction
+        assert @connection.transaction_open?
+        @connection.disconnect!
+        assert !@connection.transaction_open?
+      end
     end
   end
 end

@@ -10,10 +10,27 @@ module ActiveRecord
         @conn.exec_query('drop table if exists ex')
         @conn.exec_query(<<-eosql)
           CREATE TABLE `ex` (
-            `id` int(11) DEFAULT NULL auto_increment PRIMARY KEY,
+            `id` int(11) auto_increment PRIMARY KEY,
             `number` integer,
             `data` varchar(255))
         eosql
+      end
+
+      def test_bad_connection_mysql
+        assert_raise ActiveRecord::NoDatabaseError do
+          configuration = ActiveRecord::Base.configurations['arunit'].merge(database: 'inexistent_activerecord_unittest')
+          connection = ActiveRecord::Base.mysql_connection(configuration)
+          connection.exec_query('drop table if exists ex')
+        end
+      end
+
+      def test_valid_column
+        column = @conn.columns('ex').find { |col| col.name == 'id' }
+        assert @conn.valid_type?(column.type)
+      end
+
+      def test_invalid_column
+        assert_not @conn.valid_type?(:foobar)
       end
 
       def test_client_encoding
@@ -66,7 +83,7 @@ module ActiveRecord
         @conn.exec_query('drop table if exists ex_with_non_standard_pk')
         @conn.exec_query(<<-eosql)
           CREATE TABLE `ex_with_non_standard_pk` (
-            `code` INT(11) DEFAULT NULL auto_increment,
+            `code` INT(11) auto_increment,
              PRIMARY KEY  (`code`))
         eosql
         pk, seq = @conn.pk_and_sequence_for('ex_with_non_standard_pk')
@@ -78,7 +95,7 @@ module ActiveRecord
         @conn.exec_query('drop table if exists ex_with_custom_index_type_pk')
         @conn.exec_query(<<-eosql)
           CREATE TABLE `ex_with_custom_index_type_pk` (
-            `id` INT(11) DEFAULT NULL auto_increment,
+            `id` INT(11) auto_increment,
              PRIMARY KEY  USING BTREE (`id`))
         eosql
         pk, seq = @conn.pk_and_sequence_for('ex_with_custom_index_type_pk')
@@ -86,14 +103,39 @@ module ActiveRecord
         assert_equal @conn.default_sequence_name('ex_with_custom_index_type_pk', 'id'), seq
       end
 
+      def test_tinyint_integer_typecasting
+        @conn.exec_query('drop table if exists ex_with_non_boolean_tinyint_column')
+        @conn.exec_query(<<-eosql)
+          CREATE TABLE `ex_with_non_boolean_tinyint_column` (
+            `status` TINYINT(4))
+        eosql
+        insert(@conn, { 'status' => 2 }, 'ex_with_non_boolean_tinyint_column')
+
+        result = @conn.exec_query('SELECT status FROM ex_with_non_boolean_tinyint_column')
+
+        assert_equal 2, result.column_types['status'].type_cast(result.last['status'])
+      end
+
+      def test_supports_extensions
+        assert_not @conn.supports_extensions?, 'does not support extensions'
+      end
+
+      def test_respond_to_enable_extension
+        assert @conn.respond_to?(:enable_extension)
+      end
+
+      def test_respond_to_disable_extension
+        assert @conn.respond_to?(:disable_extension)
+      end
+
       private
-      def insert(ctx, data)
+      def insert(ctx, data, table='ex')
         binds   = data.map { |name, value|
-          [ctx.columns('ex').find { |x| x.name == name }, value]
+          [ctx.columns(table).find { |x| x.name == name }, value]
         }
         columns = binds.map(&:first).map(&:name)
 
-        sql = "INSERT INTO ex (#{columns.join(", ")})
+        sql = "INSERT INTO #{table} (#{columns.join(", ")})
                VALUES (#{(['?'] * columns.length).join(', ')})"
 
         ctx.exec_insert(sql, 'SQL', binds)

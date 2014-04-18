@@ -291,7 +291,7 @@ module ActionDispatch
         # so is this custom message really needed?
         message = message || %(Expected #{count_description(min, max, count)} matching "#{selector.to_s}", found #{matches.size}.)
         if count
-          assert_equal matches.size, count, message
+          assert_equal count, matches.size, message
         else
           assert_operator matches.size, :>=, min, message if min
           assert_operator matches.size, :<=, max, message if max
@@ -377,8 +377,8 @@ module ActionDispatch
           node.content.gsub(/<!\[CDATA\[(.*)(\]\]>)?/m) { Rack::Utils.escapeHTML($1) }
         end
 
-        selected = elements.map do |_element|
-          text = _element.children.select{ |c| not c.tag? }.map{ |c| fix_content[c] }.join
+        selected = elements.map do |elem|
+          text = elem.children.select{ |c| not c.tag? }.map{ |c| fix_content[c] }.join
           root = HTML::Document.new(CGI.unescapeHTML("<encoded>#{text}</encoded>")).root
           css_select(root, "encoded:root", &block)[0]
         end

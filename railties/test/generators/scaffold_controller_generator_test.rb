@@ -39,6 +39,7 @@ class ScaffoldControllerGeneratorTest < Rails::Generators::TestCase
 
       assert_instance_method :destroy, content do |m|
         assert_match(/@user\.destroy/, m)
+        assert_match(/User was successfully destroyed/, m)
       end
 
       assert_instance_method :set_user, content do |m|
@@ -159,10 +160,12 @@ class ScaffoldControllerGeneratorTest < Rails::Generators::TestCase
     Unknown::Generators.send :remove_const, :ActiveModel
   end
 
-  def test_new_hash_style
-    run_generator
-    assert_file "app/controllers/users_controller.rb" do |content|
-      assert_match(/render action: 'new'/, content)
+  def test_model_name_option
+    run_generator ["Admin::User", "--model-name=User"]
+    assert_file "app/controllers/admin/users_controller.rb" do |content|
+      assert_instance_method :index, content do |m|
+        assert_match("@users = User.all", m)
+      end
     end
   end
 end

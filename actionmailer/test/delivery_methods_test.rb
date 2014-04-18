@@ -38,8 +38,10 @@ class DefaultsDeliveryMethodsTest < ActiveSupport::TestCase
   end
 
   test "default sendmail settings" do
-    settings = {location:  '/usr/sbin/sendmail',
-                arguments: '-i -t'}
+    settings = {
+      location:  '/usr/sbin/sendmail',
+      arguments: '-i -t'
+    }
     assert_equal settings, ActionMailer::Base.sendmail_settings
   end
 end
@@ -138,13 +140,15 @@ class MailDeliveryTest < ActiveSupport::TestCase
   end
 
   test "default delivery options can be overridden per mail instance" do
-    settings = { address:              "localhost",
-                 port:                 25,
-                 domain:               'localhost.localdomain',
-                 user_name:            nil,
-                 password:             nil,
-                 authentication:       nil,
-                 enable_starttls_auto: true }
+    settings = {
+      address: "localhost",
+      port: 25,
+      domain: 'localhost.localdomain',
+      user_name: nil,
+      password: nil,
+      authentication: nil,
+      enable_starttls_auto: true
+    }
     assert_equal settings, ActionMailer::Base.smtp_settings
     overridden_options = {user_name: "overridden", password: "somethingobtuse"}
     mail_instance = DeliveryMailer.welcome(delivery_method_options: overridden_options)
@@ -152,10 +156,20 @@ class MailDeliveryTest < ActiveSupport::TestCase
     assert_equal "overridden", delivery_method_instance.settings[:user_name]
     assert_equal "somethingobtuse", delivery_method_instance.settings[:password]
     assert_equal delivery_method_instance.settings.merge(overridden_options), delivery_method_instance.settings
+
+    # make sure that overriding delivery method options per mail instance doesn't affect the Base setting
+    assert_equal settings, ActionMailer::Base.smtp_settings
   end
 
   test "non registered delivery methods raises errors" do
     DeliveryMailer.delivery_method = :unknown
+    assert_raise RuntimeError do
+      DeliveryMailer.welcome.deliver
+    end
+  end
+
+  test "undefined delivery methods raises errors" do
+    DeliveryMailer.delivery_method = nil
     assert_raise RuntimeError do
       DeliveryMailer.welcome.deliver
     end
